@@ -4,30 +4,27 @@ const {
   readFile,
   readFileSync,
   writeFile,
+  writeFileSync,
 } = require('fs')
+const { resolve } = require('path')
 const readline = require('readline')
 require('colors')
 const { google } = require('googleapis')
 const { prompt } = require('inquirer')
 const { sendEmail } = require('nodejs-nodemailer-outlook')
 const pdfMerge = require('pdfmerge')
-const pdf = require('pdf-creator-node')
+const PZ = require('pizzip')
+const DocxTemp = require('docxtemplater')
 const data = require('./data.json')
 
 const SCOPES = ['https://www.googleapis.com/auth/spreadsheets.readonly']
 const TOKEN_PATH = 'token.json'
 
-const options = {
-  format: 'A4',
-  orientation: 'portrait',
-  border: '10mm',
-}
-
 const courseQuestion = {
   type: 'list',
   name: 'course',
   message: 'Choose one of the following courses:',
-  choices: ['prog-four', 'mobile', 'oosd'],
+  choices: ['in608', 'in721'],
 }
 
 const processQuestion = {
@@ -37,37 +34,27 @@ const processQuestion = {
   choices: ['generate pdf', 'email pdf', 'merge pdf'],
 }
 
-const { prog_four, oosd, mobile, email, password } = data
+const { in608, in721, email, password } = data
 
 let courseName = ''
 let outputDirectory = ''
 let spreadsheetId = ''
-let template = ''
+let range = ''
 
 prompt(courseQuestion).then((answer) => {
   const { course } = answer
+  outputDirectory = course
   if (!existsSync(course)) mkdirSync(course)
   switch (course) {
-    case 'prog-four':
-      courseName = prog_four.name
-      outputDirectory = prog_four.output_directory
-      spreadsheetId = prog_four.spreadsheet_id
-      range = prog_four.range
-      template = 'second-year'
+    case 'in608':
+      courseName = 'IN608: Intermediate Application Development Concepts'
+      spreadsheetId = in608.spreadsheet_id
+      range = in608.practicals_range
       break
-    case 'mobile':
-      courseName = mobile.name
-      outputDirectory = mobile.output_directory
-      spreadsheetId = mobile.spreadsheet_id
-      range = mobile.range
-      template = 'third-year'
-      break
-    case 'oosd':
-      courseName = oosd.name
-      outputDirectory = oosd.output_directory
-      spreadsheetId = oosd.spreadsheet_id
-      range = oosd.range
-      template = 'third-year'
+    case 'in721':
+      courseName = 'IN721: Design and Development of Applications for Mobile Devices'
+      spreadsheetId = in721.spreadsheet_id
+      range = in721.overall_range
       break
   }
   readFile('credentials.json', (err, content) => {
@@ -131,25 +118,99 @@ const runProcess = (auth) => {
       const studentData = []
       if (rows.length) {
         rows.map((row) => {
-          let obj = {
-            course_name: courseName,
-            first_name: row[0],
-            last_name: row[1],
-            email_address: row[2],
-            person_code: row[3],
-            overall_percentage: row[4],
-            overall_grade: row[5]
-          }
-          if (courseName == 'IN628 Programming 4') {
-            obj.checkpoint_percentage = row[6]
-            obj.software_percentage = row[8]
-            obj.exam_percentage = row[10]
-            studentData.push(obj)
-          } else {
-            obj.exam_percentage = row[6]
-            obj.software_percentage = row[8]
-            studentData.push(obj)
-          }
+          // let obj = {
+          //   course_name: courseName,
+          //   person_code: row[0],
+          //   first_name: row[1],
+          //   last_name: row[2],
+          //   email_address: row[3],
+          //   overall_percentage: row[5],
+          //   overall_grade: row[6],
+          //   crit_one: row[7],
+          //   crit_one_mark: row[7] * 4.5,
+          //   crit_two: row[8],
+          //   crit_two_mark: row[8] * 4.5,
+          //   crit_three: row[9],
+          //   crit_three_mark: row[9] * 1,
+          //   comment_one: row[10],
+          //   comment_two: row[11],
+          //   comment_three: row[12]
+          // }
+          // let obj = {
+          //   course_name: courseName,
+          //   person_code: row[0],
+          //   first_name: row[1],
+          //   last_name: row[2],
+          //   email_address: row[3],
+          //   overall_percentage: row[4],
+          //   overall_grade: row[5],
+          //   practicals_percentage: row[6],
+          //   projects_percentage: row[7],
+          //   practicals_total: (row[6] * 0.2).toFixed(2),
+          //   projects_total: (row[7] * 0.8).toFixed(2),
+          // }
+          // let obj = {
+          //   course_name: courseName,
+          //   person_code: row[2],
+          //   first_name: row[0],
+          //   last_name: row[1],
+          //   email_address: row[3],
+          //   overall_percentage: row[4],
+          //   overall_grade: row[5],
+          //   exam_percentage: row[6],
+          //   software_percentage: row[7],
+          //   exam_total: (row[6] * 0.3).toFixed(2),
+          //   software_total: (row[7] * 0.7).toFixed(2),
+          // }
+          // let obj = {
+          //   course_name: courseName,
+          //   first_name: row[0],
+          //   last_name: row[1],
+          //   person_code: row[2],
+          //   email_address: row[3],
+          //   overall_percentage: row[5],
+          //   overall_grade: row[6],
+          //   crit_one: row[7],
+          //   crit_one_mark: row[7] * 4,
+          //   crit_two: row[8],
+          //   crit_two_mark: row[8] * 5,
+          //   crit_three: row[9],
+          //   crit_three_mark: row[9] * 1,
+          //   comment_one: row[10],
+          //   comment_two: row[11],
+          //   comment_three: row[12]
+          // }
+          // let obj = {
+          //   course_name: courseName,
+          //   person_code: row[0],
+          //   first_name: row[1],
+          //   last_name: row[2],
+          //   points: row[3],
+          //   percentage: row[4],
+          //   grade: row[5],
+          // }
+          // let obj = {
+          //   course_name: courseName,
+          //   first_name: row[0],
+          //   last_name: row[1],
+          //   email_address: row[2],
+          //   person_code: row[3],
+          //   overall_percentage: row[4],
+          //   overall_grade: row[5],
+          //   practicals_percentage: row[6],
+          //   projects_percentage: row[7],
+          // }
+          studentData.push(obj)
+          // if (courseName == 'IN628 Programming 4') {
+          //   obj.checkpoint_percentage = row[6]
+          //   obj.software_percentage = row[8]
+          //   obj.exam_percentage = row[10]
+          //   studentData.push(obj)
+          // } else {
+          //   obj.exam_percentage = row[6]
+          //   obj.software_percentage = row[8]
+          //   studentData.push(obj)
+          // }
         })
       } else {
         console.log('No data found.')
@@ -159,7 +220,7 @@ const runProcess = (auth) => {
         const { process } = answer
         switch (process) {
           case 'generate pdf':
-            generatePDF(studentData)
+            generateDoc(studentData)
             break
           case 'email pdf':
             emailPDF(studentData)
@@ -173,31 +234,35 @@ const runProcess = (auth) => {
   )
 }
 
-const generatePDF = (studentData) => {
-  const html = readFileSync(`./public/${template}.html`, 'utf8')
+const generateDoc = (studentData) => {
+  const content = readFileSync(
+    resolve(__dirname, 'assessment-mobile-overall.docx'),
+    'binary'
+  )
+  const zip = new PZ(content)
+  const doc = new DocxTemp(zip)
+  doc.setData(studentData)
   studentData.map((data) => {
     const firstName = data.first_name.toLowerCase()
     const lastName = data.last_name.toLowerCase()
-    const filename = `./${outputDirectory}-${firstName}-${lastName}-results.pdf`
-    const document = {
-      html: html,
-      data: {
-        data: [data],
-      },
-      path: filename,
-    }
-    console.log(`Generating PDF file for ${firstName} ${lastName}.`.green)
-    pdf.create(document, options)
-    console.log(`PDF file generated for ${firstName} ${lastName}.`.blue)
+    doc.setData(data)
+    doc.render()
+    const buffer = doc.getZip().generate({ type: 'nodebuffer' })
+    console.log(`Generating file for ${firstName} ${lastName}.`.green)
+    writeFileSync(
+      resolve(__dirname, 'in608', `${firstName}-${lastName}-assessment-react-native-hacker-news-app.docx`),
+      buffer
+    )
+    console.log(`File generated for ${firstName} ${lastName}.`.blue)
   })
 }
 
 const emailPDF = (studentData) => {
-  let interval = 7500
+  let interval = 8000
   studentData.map((data, idx) => {
     const firstName = data.first_name.toLowerCase()
     const lastName = data.last_name.toLowerCase()
-    const filename = `./${outputDirectory}/${outputDirectory}-${firstName}-${lastName}-final.pdf`
+    const filename = `./${outputDirectory}/${outputDirectory}-${firstName}-${lastName}-overall-results.pdf`
     setTimeout((_) => {
       console.log(`Emailing PDF file to ${firstName} ${lastName}.`.green)
       sendEmail({
@@ -207,11 +272,12 @@ const emailPDF = (studentData) => {
         },
         from: email,
         to: data.email_address.toLowerCase(),
-        subject: `${courseName} Final Results`,
+        // to: 'graysono@op.ac.nz',
+        subject: `${courseName} practical, Django/React application & overall results`,
         html: `Kia ora ${data.first_name}, <br /> <br />
-        I have attached your final results for ${courseName}. Enjoy your break and stay safe. <br /> <br />
+        Firstly, Tom & I would like to thank you for your efforts this semester. It has been one hell of a year but we all got through it together. I hope you have learnt something from this course. We have attached your results for the practicals, Django/React application & course. <b>Note:</b> all three results are in one PDF file. Your marks are currently provisional until they are officially released on Friday. Once released, you will be able to view your results on your Student Hub results & rewards tab. If you have any questions about your results, please do not hesitate to ask. Stay safe & enjoy your well earned break. See you next year. <br /> <br />
         Ngā mihi nui, <br /> <br />
-        Grayson Orr`,
+        Grayson Orr & Tom Clark`,
         attachments: [
           {
             path: filename,
@@ -226,27 +292,25 @@ const emailPDF = (studentData) => {
   })
 }
 
-const mergePDF = (studentData) =>  {
-    let interval = 7500
-    studentData.map((data, idx) => {
-      const firstName = data.first_name.toLowerCase()
-      const lastName = data.last_name.toLowerCase()
-      setTimeout((_) => {
-        console.log(`Merging PDF file for ${firstName} ${lastName}.`.green)
-        pdfMerge(
-          [
-            `./${outputDirectory}/${outputDirectory}-${firstName}-${lastName}-results.pdf`,
-            `./${outputDirectory}/01-assessment-${firstName}-${lastName}.pdf`,
-            `./${outputDirectory}/02-assessment-${firstName}-${lastName}.pdf`,
-            `./${outputDirectory}/exam-${firstName}-${lastName}.pdf`,
-            `./${outputDirectory}/practicals-${firstName}-${lastName}.pdf`,
-          ],
-          `./${outputDirectory}-${firstName}-${lastName}-final.pdf`
+const mergePDF = (studentData) => {
+  let interval = 7500
+  studentData.map((data, idx) => {
+    const firstName = data.first_name.toLowerCase()
+    const lastName = data.last_name.toLowerCase()
+    setTimeout((_) => {
+      console.log(`Merging PDF file for ${firstName} ${lastName}.`.green)
+      pdfMerge(
+        [
+          `./${outputDirectory}/${firstName}-${lastName}-overall.pdf`,
+          `./${outputDirectory}/${firstName}-${lastName}-practicals.pdf`,
+          `./${outputDirectory}/${firstName}-${lastName}-django-rest-react-opentdb-api.pdf`
+        ],
+        `./${outputDirectory}/${outputDirectory}-${firstName}-${lastName}-overall-results.pdf`
+      )
+        .then((_) =>
+          console.log(`PDF files merged for ${firstName} ${lastName}.`.blue)
         )
-          .then((_) =>
-            console.log(`PDF files merged for ${firstName} ${lastName}.`.blue)
-          )
-          .catch((err) => console.log(err))
-      }, idx * interval)
-    })
+        .catch((err) => console.log(err))
+    }, idx * interval)
+  })
 }
